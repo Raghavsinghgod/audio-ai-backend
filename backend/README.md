@@ -21,7 +21,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-pip install -r requirements.txt
+pip install -r requirements.txt  # or: pip install -e .
 
 cp env.example .env              # then edit .env if needed
 
@@ -40,11 +40,13 @@ The API is then available at `http://localhost:8000`. Interactive docs:
 
 All settings come from environment variables (`.env` is loaded automatically).
 
-| Variable         | Default | Description                                                                 |
-| ---------------- | ------- | --------------------------------------------------------------------------- |
-| `OPENAI_API_KEY` | —       | OpenAI key for `/ask-audio` and `/chat`. When missing, both return mock answers. |
-| `WHISPER_MODEL`  | `base`  | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3`. Larger is slower but more accurate. |
-| `DEVICE`         | `cpu`   | Compute device: `cpu`, `cuda`, or `auto`.                                   |
+| Variable             | Default | Description                                                                       |
+| -------------------- | ------- | --------------------------------------------------------------------------------- |
+| `OPENAI_API_KEY`     | —       | OpenAI key for `/ask-audio` and `/chat`. When missing, both return mock answers.   |
+| `WHISPER_MODEL`      | `base`  | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3`. Larger is slower but more accurate. |
+| `DEVICE`             | `cpu`   | Compute device: `cpu`, `cuda`, or `auto`.                                         |
+| `MAX_UPLOAD_SIZE_MB` | `25`    | Max upload size in megabytes; larger files are rejected with `413`.               |
+| `CORS_ORIGINS`       | `*`     | Comma-separated allowed origins, or `*` for any origin.                           |
 
 ## Endpoints
 
@@ -127,14 +129,28 @@ curl -X POST http://localhost:8000/chat \
 | Condition                     | Status | Detail                                              |
 | ----------------------------- | ------ | --------------------------------------------------- |
 | Missing file                  | `400`  | No file in the `file` form field.                   |
+| Empty file                    | `400`  | Uploaded file has zero bytes.                       |
 | Unsupported audio format      | `415`  | Extension outside the supported set.                |
 | Undecodable / corrupt audio   | `400`  | faster-whisper could not decode the file.           |
+| Upload exceeds size limit     | `413`  | Larger than `MAX_UPLOAD_SIZE_MB`.                   |
 | Transcription failure         | `500`  | Unexpected error during transcription.              |
 | Missing `OPENAI_API_KEY`      | `200`  | `/ask-audio` and `/chat` return a mock answer.      |
 | Upstream OpenAI failure       | `502`  | The OpenAI request itself failed.                   |
 
 Uploaded files are written to a temporary file, processed, and deleted in a
 `finally` block — nothing is stored between requests.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+ruff check .        # lint
+pytest              # tests
+```
+
+The test suite stubs out faster-whisper and OpenAI, so it runs in seconds
+without a model download, GPU, or API key. CI (GitHub Actions) runs the same
+lint and tests on Python 3.10–3.12 — see `.github/workflows/backend-ci.yml`.
 
 ## Project structure
 
@@ -146,6 +162,23 @@ backend/
 │   ├── llm.py            # OpenAI client + mock fallback
 │   ├── main.py           # FastAPI app, routes, upload handling
 │   └── whisper_loader.py # model loaded once at startup
+├── tests/
+│   ├── conftest.py       # fixtures + faster-whisper / OpenAI stubs
+│   └── test_api.py       # endpoint tests
 ├── env.example           # template — copy to .env
-└── requirements.txt
+├── pyproject.toml        # metadata, dependencies, tool config
+└── requirements.txt      # thin wrapper around pyproject.toml
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy and what
+this API does — and does not — protect against.

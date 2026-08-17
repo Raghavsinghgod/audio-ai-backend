@@ -9,16 +9,17 @@ Run with:
 """
 
 import logging
-import shutil
+import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .config import DEVICE, OPENAI_API_KEY, WHISPER_MODEL
-from .llm import LLMError, chat as llm_chat
+from .config import CORS_ORIGINS, DEVICE, MAX_UPLOAD_SIZE_MB, OPENAI_API_KEY, WHISPER_MODEL
+from .llm import LLMError
+from .llm import chat as llm_chat
 from .whisper_loader import get_model, load_model
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -31,6 +32,10 @@ ALLOWED_AUDIO_SUFFIXES = {
 }
 
 ALLOWED_ROLES = {"system", "user", "assistant"}
+
+# Hard limits that keep the API cheap to run and hard to abuse.
+MAX_UPLOAD_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+MAX_CHAT_MESSAGES = 50
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a concise, helpful assistant. Respond directly to the user's "
@@ -47,10 +52,12 @@ async def lifespan(_app):
 
 app = FastAPI(title="Audio-to-Text API", version="1.0.0", lifespan=lifespan)
 
-# Permissive CORS so any frontend can call this API.
+# Configurable CORS so a frontend can call this API. Set CORS_ORIGINS to a
+# comma-separated list of origins, or leave "*" for any origin.
+origins = [origin.strip() for origin in CORS_ORIGINS.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -70,16 +77,30 @@ def _validate_audio_suffix(filename):
 
 
 def _save_upload(file):
-    """Persist an uploaded file to a temp path and return its location."""
+    """Persist an uploaded file to a temp path and return its location.
+
+    Reads in chunks and aborts with 413 once the size limit is exceeded.
+    """
     suffix = Path(file.filename or "").suffix.lower() or ".webm"
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    fd, tmp_name = tempfile.mkstemp(suffix=suffix)
     try:
-        with tmp:
-            shutil.copyfileobj(file.file, tmp)
+        with os.fdopen(fd, "wb") as tmp:
+            written = 0
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_UPLOAD_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds the {MAX_UPLOAD_SIZE_MB} MB upload limit.",
+                    )
+                tmp.write(chunk)
     except Exception:
-        _safe_unlink(tmp.name)
+        _safe_unlink(tmp_name)
         raise
-    return Path(tmp.name)
+    return Path(tmp_name)
 
 
 def _safe_unlink(path):
@@ -92,6 +113,9 @@ def _safe_unlink(path):
 
 def _transcribe(path):
     """Transcribe an audio file with faster-whisper into structured JSON."""
+    if path.stat().st_size == 0:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+
     try:
         segments_iter, info = get_model().transcribe(str(path), beam_size=5)
         segments = [
@@ -187,9 +211,19 @@ async def chat(payload=Body(...)):
     messages = payload.get("messages")
     if not isinstance(messages, list) or not messages:
         raise HTTPException(status_code=400, detail="'messages' must be a non-empty array.")
+    if len(messages) > MAX_CHAT_MESSAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"'messages' must contain at most {MAX_CHAT_MESSAGES} messages.",
+        )
 
     cleaned = []
     for message in messages:
+        if not isinstance(message, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="Each message must be an object with 'role' and 'content'.",
+            )
         role = message.get("role")
         content = message.get("content")
         if role not in ALLOWED_ROLES:
@@ -197,8 +231,8 @@ async def chat(payload=Body(...)):
                 status_code=400,
                 detail=f"Invalid role '{role}'. Use one of: {', '.join(sorted(ALLOWED_ROLES))}.",
             )
-        if not str(content).strip():
-            raise HTTPException(status_code=400, detail="Message content must not be empty.")
+        if not isinstance(content, str) or not content.strip():
+            raise HTTPException(status_code=400, detail="'content' must be a non-empty string.")
         cleaned.append({"role": role, "content": content})
 
     return {"answer": _llm_answer(cleaned)}
