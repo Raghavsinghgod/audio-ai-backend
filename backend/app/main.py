@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .config import CORS_ORIGINS, DEVICE, MAX_UPLOAD_SIZE_MB, OPENAI_API_KEY, WHISPER_MODEL
 from .llm import LLMError
@@ -41,6 +42,9 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are a concise, helpful assistant. Respond directly to the user's "
     "spoken message."
 )
+
+# Browser playground served by this API at /playground.
+PLAYGROUND_HTML = Path(__file__).parent / "playground.html"
 
 
 @asynccontextmanager
@@ -156,7 +160,15 @@ def health():
         "model": WHISPER_MODEL,
         "device": DEVICE,
         "llm": "openai" if OPENAI_API_KEY else "mock",
+        "docs": "/docs",
+        "playground": "/playground",
     }
+
+
+@app.get("/playground")
+def playground():
+    """Browser-based playground for testing the API endpoints."""
+    return FileResponse(PLAYGROUND_HTML)
 
 
 @app.post("/transcribe")

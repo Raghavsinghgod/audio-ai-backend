@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Audio-to-Text API — Playground</title>
+<style>
+  :root {
+    --ink: #171717;
+    --ink-soft: #525252;
+    --ink-faint: #a3a3a3;
+    --paper: #ffffff;
+    --paper-soft: #fafafa;
+    --line: #e5e5e5;
+    --line-strong: #d4d4d4;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --err: #dc2626;
+    --mono: "SFMono-Regular", ui-monospace, "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* Header */
+  header.site {
+    border-bottom: 1px solid var(--line);
+    background: var(--paper);
+  }
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 18px 0;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -0.01em; }
+  .brand .mark {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--ink); position: relative;
+  }
+  .brand .mark::after {
+    content: ""; position: absolute; inset: 5px;
+    border-radius: 50%; background: var(--paper);
+    -webkit-mask: radial-gradient(circle at 30% 30%, transparent 30%, #000 31%);
+            mask: radial-gradient(circle at 30% 30%, transparent 30%, #000 31%);
+  }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.02em;
+    padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--ink-soft); white-space: nowrap;
+  }
+  .pill .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--ink-faint); }
+  .pill .dot.ok { background: var(--ok); }
+  .pill .dot.warn { background: var(--warn); }
+
+  /* Intro */
+  .intro { padding: 64px 0 40px; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 14px;
+  }
+  h1 { font-size: 40px; line-height: 1.1; letter-spacing: -0.03em; margin: 0 0 16px; font-weight: 650; }
+  .lede { color: var(--ink-soft); max-width: 640px; margin: 0 0 28px; font-size: 16px; }
+  .links { display: flex; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 13px; }
+  .links a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line-strong); padding-bottom: 2px; }
+  .links a:hover { border-color: var(--ink); }
+
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 4px; border-bottom: 1px solid var(--line);
+    margin-bottom: 32px; overflow-x: auto;
+  }
+  .tab {
+    appearance: none; background: none; border: none; cursor: pointer;
+    font: inherit; font-size: 14px; color: var(--ink-faint);
+    padding: 12px 16px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+
+  /* Panels */
+  .panel { display: none; padding-bottom: 72px; }
+  .panel.active { display: block; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .panel-head h2 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+  .panel-head code.path { font-family: var(--mono); font-size: 13px; color: var(--ink-faint); }
+
+  /* Audio controls */
+  .recorder {
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--paper-soft); padding: 20px; margin: 18px 0;
+  }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .btn {
+    appearance: none; border: 1px solid var(--line-strong); background: var(--paper);
+    color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
+    padding: 8px 16px; border-radius: 8px; display: inline-flex; align-items: center; gap: 8px;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  .btn:hover { border-color: var(--ink); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .btn.solid:hover { background: #000; }
+  .btn.rec { border-color: var(--err); color: var(--err); }
+  .btn.rec .blink {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--err);
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .file-label {
+    border: 1px dashed var(--line-strong); border-radius: 8px; padding: 8px 16px;
+    font-size: 14px; color: var(--ink-soft); cursor: pointer;
+  }
+  .file-label:hover { border-color: var(--ink); color: var(--ink); }
+  input[type="file"] { display: none; }
+  .source-note { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); margin-top: 10px; }
+  .hint { font-size: 13px; color: var(--ink-faint); }
+  .timer { font-family: var(--mono); font-size: 13px; color: var(--ink-soft); min-width: 44px; }
+
+  /* Form fields */
+  textarea, input[type="text"] {
+    width: 100%; font: inherit; font-size: 14px;
+    border: 1px solid var(--line-strong); border-radius: 8px;
+    padding: 10px 12px; color: var(--ink); background: var(--paper);
+    resize: vertical;
+  }
+  textarea:focus, input[type="text"]:focus { outline: none; border-color: var(--ink); }
+  label.field { display: block; font-size: 13px; color: var(--ink-soft); margin: 18px 0 6px; }
+
+  /* Chat */
+  .chat-window {
+    border: 1px solid var(--line); border-radius: 10px;
+    min-height: 220px; max-height: 380px; overflow-y: auto;
+    padding: 20px; margin: 18px 0; background: var(--paper-soft);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .msg { max-width: 78%; padding: 10px 14px; border-radius: 10px; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--ink); color: var(--paper); border-bottom-right-radius: 2px; }
+  .msg.assistant { align-self: flex-start; background: var(--paper); border: 1px solid var(--line); border-bottom-left-radius: 2px; }
+  .msg .role { display: block; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.55; margin-bottom: 4px; }
+  .chat-input { display: flex; gap: 10px; }
+  .chat-input input { flex: 1; }
+
+  /* Results */
+  .result { margin-top: 22px; }
+  .result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+  .result-head h3 { font-size: 13px; font-weight: 600; margin: 0; }
+  .copy {
+    appearance: none; background: none; border: none; cursor: pointer;
+    font-family: var(--mono); font-size: 12px; color: var(--ink-faint); padding: 2px 4px;
+  }
+  .copy:hover { color: var(--ink); }
+  pre.json {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    background: var(--paper-soft); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; overflow-x: auto; margin: 0; white-space: pre-wrap; word-break: break-word;
+  }
+  .status { font-size: 14px; margin: 12px 0 0; min-height: 22px; }
+  .status .err { color: var(--err); }
+  .status .ok { color: var(--ok); }
+  .status .busy { color: var(--ink-faint); }
+
+  footer.site { border-top: 1px solid var(--line); padding: 26px 0 40px; color: var(--ink-faint); font-size: 13px; }
+  footer.site .row { justify-content: space-between; }
+  footer.site a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); }
+  footer.site a:hover { border-color: var(--ink); color: var(--ink); }
+
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    .msg { max-width: 90%; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap nav">
+    <div class="brand">
+      <span class="mark"></span>
+      Audio-to-Text API
+    </div>
+    <div class="pills" id="pills">
+      <span class="pill"><span class="dot" id="dot-model"></span><span id="pill-model">model —</span></span>
+      <span class="pill"><span class="dot" id="dot-device"></span><span id="pill-device">device —</span></span>
+      <span class="pill"><span class="dot" id="dot-llm"></span><span id="pill-llm">llm —</span></span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="intro">
+    <p class="eyebrow">FastAPI · faster-whisper · OpenAI-ready</p>
+    <h1>Voice in. Text out. Answers on request.</h1>
+    <p class="lede">
+      A browser playground for the audio-to-text API. Record or upload audio to get a
+      transcript, ask the LLM about what was said, or chat directly. Every call hits a
+      real endpoint — this page is served by the API itself.
+    </p>
+    <div class="links">
+      <a href="/docs">OpenAPI docs</a>
+      <a href="/">Health check</a>
+      <a href="#transcribe">Transcribe</a>
+      <a href="#ask">Ask audio</a>
+      <a href="#chat">Chat</a>
+    </div>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="transcribe">Transcribe</button>
+    <button class="tab" data-tab="ask">Ask audio</button>
+    <button class="tab" data-tab="chat">Chat</button>
+  </nav>
+
+  <!-- Transcribe -->
+  <section class="panel active" id="panel-transcribe">
+    <div class="panel-head">
+      <h2>Transcribe</h2>
+      <code class="path">POST /transcribe</code>
+    </div>
+    <p class="hint">Upload audio and get back <code>text</code>, <code>language</code>, <code>duration</code>, and timed <code>segments</code>.</p>
+
+    <div class="recorder">
+      <div class="row">
+        <button class="btn rec" id="rec-btn" type="button">
+          <span class="blink" id="rec-blink" style="display:none"></span><span id="rec-label">Record</span>
+        </button>
+        <span class="timer" id="timer">0:00</span>
+        <label class="file-label" for="file-input">or upload a file…</label>
+        <input type="file" id="file-input" accept=".mp3,.wav,.m4a,.aac,.ogg,.oga,.opus,.flac,.webm,.mp4,audio/*" />
+        <button class="btn solid" id="go-btn" type="button">Transcribe</button>
+      </div>
+      <p class="source-note" id="source-note">No audio selected.</p>
+    </div>
+    <p class="status" id="status-transcribe"></p>
+
+    <div class="result" id="result-transcribe" style="display:none">
+      <div class="result-head">
+        <h3>Response</h3>
+        <button class="copy" type="button" data-copy="json-transcribe">copy</button>
+      </div>
+      <pre class="json" id="json-transcribe"></pre>
+    </div>
+  </section>
+
+  <!-- Ask audio -->
+  <section class="panel" id="panel-ask">
+    <div class="panel-head">
+      <h2>Ask audio</h2>
+      <code class="path">POST /ask-audio</code>
+    </div>
+    <p class="hint">Transcribe the audio, then send the transcript to the LLM. Returns <code>transcript</code> and <code>answer</code>.</p>
+
+    <div class="recorder">
+      <div class="row">
+        <button class="btn rec" id="rec-btn-2" type="button">
+          <span class="blink" id="rec-blink-2" style="display:none"></span><span id="rec-label-2">Record</span>
+        </button>
+        <span class="timer" id="timer-2">0:00</span>
+        <label class="file-label" for="file-input-2">or upload a file…</label>
+        <input type="file" id="file-input-2" accept=".mp3,.wav,.m4a,.aac,.ogg,.oga,.opus,.flac,.webm,.mp4,audio/*" />
+        <button class="btn solid" id="ask-btn" type="button">Transcribe + ask</button>
+      </div>
+      <p class="source-note" id="source-note-2">No audio selected.</p>
+      <label class="field" for="system-prompt">System prompt <span class="hint">(optional — defaults to “concise, helpful assistant”)</span></label>
+      <textarea id="system-prompt" rows="2" placeholder="You are a concise, helpful assistant. Respond directly to the user's spoken message."></textarea>
+    </div>
+    <p class="status" id="status-ask"></p>
+
+    <div class="result" id="result-ask" style="display:none">
+      <div class="result-head">
+        <h3>Response</h3>
+        <button class="copy" type="button" data-copy="json-ask">copy</button>
+      </div>
+      <pre class="json" id="json-ask"></pre>
+    </div>
+  </section>
+
+  <!-- Chat -->
+  <section class="panel" id="panel-chat">
+    <div class="panel-head">
+      <h2>Chat</h2>
+      <code class="path">POST /chat</code>
+    </div>
+    <p class="hint">Send JSON chat messages straight to the LLM. No audio involved.</p>
+
+    <div class="chat-window" id="chat-window">
+      <div class="msg assistant"><span class="role">assistant</span>Send a message to start the conversation. This endpoint accepts a JSON body like <code>{"messages":[{"role":"user","content":"hi"}]}</code>.</div>
+    </div>
+    <div class="chat-input">
+      <input type="text" id="chat-input" placeholder="Message the LLM…" autocomplete="off" />
+      <button class="btn solid" id="chat-btn" type="button">Send</button>
+    </div>
+    <p class="status" id="status-chat"></p>
+
+    <div class="result" id="result-chat" style="display:none">
+      <div class="result-head">
+        <h3>Last request / response</h3>
+        <button class="copy" type="button" data-copy="json-chat">copy</button>
+      </div>
+      <pre class="json" id="json-chat"></pre>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap row">
+    <span>Audio-to-Text API · playground</span>
+    <span><a href="/docs">OpenAPI docs</a> · <a href="/">health</a></span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ---------- shared helpers ---------- */
+
+  const $ = (id) => document.getElementById(id);
+  const fmt = (obj) => JSON.stringify(obj, null, 2);
+
+  async function postForm(url, body, isJson) {
+    const res = await fetch(url, {
+      method: "POST",
+      body,
+      headers: isJson ? { "Content-Type": "application/json" } : undefined,
+    });
+    let body = null;
+    try { body = await res.json(); } catch (_) { /* non-JSON body */ }
+    if (!res.ok) {
+      const detail = body && body.detail ? (typeof body.detail === "string" ? body.detail : fmt(body.detail)) : res.statusText;
+      const err = new Error(detail);
+      err.status = res.status;
+      throw err;
+    }
+    return body;
+  }
+
+  function show(statusEl, message, kind) {
+    statusEl.innerHTML = "";
+    const span = document.createElement("span");
+    span.className = kind || "";
+    span.textContent = message;
+    statusEl.appendChild(span);
+  }
+
+  function reveal(jsonEl, statusEl, data, busyMessage, okMessage) {
+    jsonEl.textContent = fmt(data);
+    jsonEl.closest(".result").style.display = "block";
+    show(statusEl, okMessage, "ok");
+    if (busyMessage) show(statusEl, busyMessage, "busy");
+  }
+
+  /* ---------- health ---------- */
+
+  async function loadHealth() {
+    try {
+      const res = await fetch("/");
+      const data = await res.json();
+      const set = (id, label, ok) => {
+        $(id).textContent = label;
+        $(id + "-dot").className = "dot" + (ok ? " ok" : "");
+      };
+      set("pill-model", "model " + data.model, true);
+      set("pill-device", "device " + data.device, true);
+      const live = data.llm === "openai";
+      set("pill-llm", "llm " + data.llm, live);
+      $( "pill-llm" ).title = live ? "" : "Set OPENAI_API_KEY to enable live LLM answers (mock mode otherwise).";
+    } catch (_) {
+      set("pill-model", "model —", false);
+      set("pill-device", "device —", false);
+      set("pill-llm", "llm —", false);
+    }
+  }
+
+  /* ---------- recorder ---------- */
+
+  function makeRecorder(cfg) {
+    let mediaRecorder = null;
+    let chunks = [];
+    let timerId = null;
+    let seconds = 0;
+    let stream = null;
+
+    function tick() {
+      seconds += 1;
+      cfg.timerEl.textContent = Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    }
+
+    return {
+      async start() {
+        if (mediaRecorder) return;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (_) {
+          cfg.onError("Microphone unavailable. Check browser permissions, or upload an audio file instead.");
+          return;
+        }
+        const mime = pickMime();
+        try {
+          mediaRecorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+        } catch (_) {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+        chunks = [];
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          const type = mediaRecorder.mimeType || mime || "audio/webm";
+          const blob = new Blob(chunks, { type });
+          cfg.onBlob(blob, nameFor(type));
+          stream.getTracks().forEach((t) => t.stop());
+          stream = null;
+          mediaRecorder = null;
+        };
+        mediaRecorder.start();
+        seconds = 0;
+        cfg.timerEl.textContent = "0:00";
+        timerId = setInterval(tick, 1000);
+        cfg.setRecording(true);
+      },
+      stop() {
+        if (!mediaRecorder) return;
+        mediaRecorder.stop();
+        clearInterval(timerId);
+        cfg.setRecording(false);
+      },
+    };
+  }
+
+  function pickMime() {
+    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+    return candidates.find((t) => MediaRecorder.isTypeSupported(t)) || null;
+  }
+
+  function nameFor(mime) {
+    if (mime.includes("ogg")) return "recording.ogg";
+    if (mime.includes("mp4") || mime.includes("aac")) return "recording.m4a";
+    if (mime.includes("wav")) return "recording.wav";
+    return "recording.webm";
+  }
+
+  /* ---------- wire up the three tabs ---------- */
+
+  const TABS = ["transcribe", "ask", "chat"];
+  $("tabs").addEventListener("click", (e) => {
+    const tab = e.target.closest(".tab");
+    if (!tab) return;
+    TABS.forEach((t) => {
+      $("tab-" + t).classList.toggle("active", t === tab.dataset.tab);
+      $("panel-" + t).classList.toggle("active", t === tab.dataset.tab);
+    });
+  });
+
+  function bindPicker(fileInputId, noteId) {
+    const input = $(fileInputId);
+    input.addEventListener("change", () => {
+      const f = input.files && input.files[0];
+      $(noteId).textContent = f ? "Selected file: " + f.name + " (" + Math.round(f.size / 1024) + " KB)" : "No audio selected.";
+    });
+  }
+  bindPicker("file-input", "source-note");
+  bindPicker("file-input-2", "source-note-2");
+
+  function makeAudioState(recBtnId, recLabelId, recBlinkId, timerId, noteId, fileInputId) {
+    const state = { blob: null, file: null };
+    const rec = makeRecorder({
+      timerEl: $(timerId),
+      setRecording(on) {
+        $(recBtnId).classList.toggle("rec", on);
+        $(recBlinkId).style.display = on ? "inline-block" : "none";
+        $(recLabelId).textContent = on ? "Stop" : "Record";
+      },
+      onBlob(blob) {
+        state.blob = blob;
+        state.file = null;
+        $(fileInputId).value = "";
+        $(noteId).textContent = "Recording: " + blob.size + " bytes (" + blob.type + ")";
+      },
+      onError(msg) { $(noteId).textContent = msg; },
+    });
+    $(recBtnId).addEventListener("click", () => {
+      if ($(recBtnId).classList.contains("rec")) rec.stop();
+      else rec.start();
+    });
+    $(fileInputId).addEventListener("change", () => {
+      const f = $(fileInputId).files && $(fileInputId).files[0];
+      if (f) { state.file = f; state.blob = null; }
+    });
+    return state;
+  }
+
+  const t = makeAudioState("rec-btn", "rec-label", "rec-blink", "timer", "source-note", "file-input");
+  const a = makeAudioState("rec-btn-2", "rec-label-2", "rec-blink-2", "timer-2", "source-note-2", "file-input-2");
+
+  function audioFormData(state, extra) {
+    const form = new FormData();
+    if (state.blob) form.append("file", state.blob, nameFor(state.blob.type));
+    else if (state.file) form.append("file", state.file, state.file.name);
+    else return null;
+    if (extra) extra(form);
+    return form;
+  }
+
+  $("go-btn").addEventListener("click", async () => {
+    const status = $("status-transcribe");
+    const form = audioFormData(t);
+    if (!form) { show(status, "Record or upload an audio file first.", "err"); return; }
+    $("go-btn").disabled = true;
+    show(status, "Transcribing…", "busy");
+    try {
+      const data = await postForm("/transcribe", form);
+      reveal($("json-transcribe"), status, data, null, "Done — transcript below.");
+    } catch (e) {
+      show(status, (e.status ? "HTTP " + e.status + ": " : "") + e.message, "err");
+    } finally {
+      $("go-btn").disabled = false;
+    }
+  });
+
+  $("ask-btn").addEventListener("click", async () => {
+    const status = $("status-ask");
+    const form = audioFormData(a, (f) => {
+      const prompt = $("system-prompt").value.trim();
+      if (prompt) f.append("system_prompt", prompt);
+    });
+    if (!form) { show(status, "Record or upload an audio file first.", "err"); return; }
+    $("ask-btn").disabled = true;
+    show(status, "Transcribing, then asking the LLM…", "busy");
+    try {
+      const data = await postForm("/ask-audio", form);
+      reveal($("json-ask"), status, data, null, "Done — transcript and answer below.");
+    } catch (e) {
+      show(status, (e.status ? "HTTP " + e.status + ": " : "") + e.message, "err");
+    } finally {
+      $("ask-btn").disabled = false;
+    }
+  });
+
+  const chatWindow = $("chat-window");
+  const chatHistory = [];
+  let chatBusy = false;
+
+  function appendMsg(role, content) {
+    const div = document.createElement("div");
+    div.className = "msg " + role;
+    const label = document.createElement("span");
+    label.className = "role";
+    label.textContent = role;
+    div.appendChild(label);
+    div.appendChild(document.createTextNode(content));
+    chatWindow.appendChild(div);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  }
+
+  async function sendChat() {
+    const input = $("chat-input");
+    const text = input.value.trim();
+    const status = $("status-chat");
+    if (!text || chatBusy) return;
+    chatHistory.push({ role: "user", content: text });
+    appendMsg("user", text);
+    input.value = "";
+    chatBusy = true;
+    $("chat-btn").disabled = true;
+    show(status, "Waiting for the LLM…", "busy");
+    try {
+      const data = await postForm("/chat", JSON.stringify({ messages: chatHistory }), true);
+      chatHistory.push({ role: "assistant", content: data.answer });
+      appendMsg("assistant", data.answer);
+      reveal($("json-chat"), status, { request: { messages: chatHistory.slice(0, -1) }, response: data }, null, "Done.");
+    } catch (e) {
+      show(status, (e.status ? "HTTP " + e.status + ": " : "") + e.message, "err");
+    } finally {
+      chatBusy = false;
+      $("chat-btn").disabled = false;
+      input.focus();
+    }
+  }
+
+  $("chat-btn").addEventListener("click", sendChat);
+  $("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+
+  /* copy buttons */
+  document.querySelectorAll(".copy").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const text = $(btn.dataset.copy).textContent;
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "copied";
+        setTimeout(() => { btn.textContent = "copy"; }, 1200);
+      } catch (_) { /* clipboard unavailable */ }
+    });
+  });
+
+  loadHealth();
+})();
+</script>
+</body>
+</html>

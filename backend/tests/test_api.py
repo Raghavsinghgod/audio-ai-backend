@@ -19,6 +19,15 @@ def test_health(client):
     assert body["status"] == "ok"
     assert body["service"] == "audio-to-text"
     assert body["llm"] == "mock"
+    assert body["playground"] == "/playground"
+
+
+def test_playground(client):
+    response = client.get("/playground")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Audio-to-Text API" in response.text
+    assert "/transcribe" in response.text
 
 
 def test_transcribe_missing_file(client):
