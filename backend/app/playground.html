@@ -334,15 +334,15 @@
       body,
       headers: isJson ? { "Content-Type": "application/json" } : undefined,
     });
-    let body = null;
-    try { body = await res.json(); } catch (_) { /* non-JSON body */ }
+    let data = null;
+    try { data = await res.json(); } catch (_) { /* non-JSON body */ }
     if (!res.ok) {
-      const detail = body && body.detail ? (typeof body.detail === "string" ? body.detail : fmt(body.detail)) : res.statusText;
+      const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : fmt(data.detail)) : res.statusText;
       const err = new Error(detail);
       err.status = res.status;
       throw err;
     }
-    return body;
+    return data;
   }
 
   function show(statusEl, message, kind) {
@@ -353,11 +353,10 @@
     statusEl.appendChild(span);
   }
 
-  function reveal(jsonEl, statusEl, data, busyMessage, okMessage) {
+  function reveal(jsonEl, statusEl, data, okMessage) {
     jsonEl.textContent = fmt(data);
     jsonEl.closest(".result").style.display = "block";
     show(statusEl, okMessage, "ok");
-    if (busyMessage) show(statusEl, busyMessage, "busy");
   }
 
   /* ---------- health ---------- */
@@ -454,10 +453,9 @@
   $("tabs").addEventListener("click", (e) => {
     const tab = e.target.closest(".tab");
     if (!tab) return;
-    TABS.forEach((t) => {
-      $("tab-" + t).classList.toggle("active", t === tab.dataset.tab);
-      $("panel-" + t).classList.toggle("active", t === tab.dataset.tab);
-    });
+    const name = tab.dataset.tab;
+    document.querySelectorAll(".tab").forEach((el) => el.classList.toggle("active", el === tab));
+    TABS.forEach((t) => $("panel-" + t).classList.toggle("active", t === name));
   });
 
   function bindPicker(fileInputId, noteId) {
@@ -518,7 +516,7 @@
     show(status, "Transcribing…", "busy");
     try {
       const data = await postForm("/transcribe", form);
-      reveal($("json-transcribe"), status, data, null, "Done — transcript below.");
+      reveal($("json-transcribe"), status, data, "Done — transcript below.");
     } catch (e) {
       show(status, (e.status ? "HTTP " + e.status + ": " : "") + e.message, "err");
     } finally {
@@ -537,7 +535,7 @@
     show(status, "Transcribing, then asking the LLM…", "busy");
     try {
       const data = await postForm("/ask-audio", form);
-      reveal($("json-ask"), status, data, null, "Done — transcript and answer below.");
+      reveal($("json-ask"), status, data, "Done — transcript and answer below.");
     } catch (e) {
       show(status, (e.status ? "HTTP " + e.status + ": " : "") + e.message, "err");
     } finally {
@@ -576,7 +574,7 @@
       const data = await postForm("/chat", JSON.stringify({ messages: chatHistory }), true);
       chatHistory.push({ role: "assistant", content: data.answer });
       appendMsg("assistant", data.answer);
-      reveal($("json-chat"), status, { request: { messages: chatHistory.slice(0, -1) }, response: data }, null, "Done.");
+      reveal($("json-chat"), status, { request: { messages: chatHistory.slice(0, -1) }, response: data }, "Done.");
     } catch (e) {
       show(status, (e.status ? "HTTP " + e.status + ": " : "") + e.message, "err");
     } finally {

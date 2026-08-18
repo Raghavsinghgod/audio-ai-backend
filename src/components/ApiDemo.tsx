@@ -383,7 +383,7 @@ export default function ApiDemo() {
                 </Button>
                 {!hasAudio && <span className="text-xs text-neutral-400">Record or upload first ↑</span>}
               </div>
-              {transcribeResult && (
+              {transcribeResult !== null && (
                 <ResultBlock label="Transcript" value={transcribeResult} onCopy={copyJson} copied={copied} />
               )}
             </div>
@@ -415,7 +415,7 @@ export default function ApiDemo() {
                 </Button>
                 {!hasAudio && <span className="text-xs text-neutral-400">Record or upload first ↑</span>}
               </div>
-              {askResult && (
+              {askResult !== null && (
                 <ResultBlock label="Transcript + answer" value={askResult} onCopy={copyJson} copied={copied} />
               )}
             </div>

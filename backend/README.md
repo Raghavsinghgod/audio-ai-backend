@@ -36,6 +36,14 @@ The API is then available at `http://localhost:8000`. Interactive docs:
 > configuration. The LLM endpoints work without a key too — they return a mock
 > answer until `OPENAI_API_KEY` is set.
 
+## Playground
+
+The API serves a browser-based playground at **`http://localhost:8000/playground`**
+— a small, dependency-free page that records or uploads audio and calls the real
+endpoints. It's the fastest way to test every route without writing curl
+commands. (The Vite landing page in this repo embeds the same demo and points
+at this backend via `VITE_API_URL`.)
+
 ## Configuration
 
 All settings come from environment variables (`.env` is loaded automatically).
@@ -64,9 +72,15 @@ curl http://localhost:8000/
   "service": "audio-to-text",
   "model": "base",
   "device": "cpu",
-  "llm": "mock"
+  "llm": "mock",
+  "docs": "/docs",
+  "playground": "/playground"
 }
 ```
+
+### `GET /playground`
+
+Returns the browser playground (HTML) described above.
 
 ### `POST /transcribe`
 
